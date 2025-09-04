@@ -1,0 +1,6 @@
+streamlit==1.38.0
+prophet==1.1.5
+scikit-learn==1.5.1
+matplotlib==3.9.2
+pandas==2.2.2
+numpy==1.26.4
