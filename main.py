@@ -3,9 +3,13 @@ import pandas as pd
 import matplotlib.pyplot as plt
 from prophet import Prophet
 from sklearn.metrics import mean_absolute_error, r2_score
+import joblib
+import os
 
 st.set_page_config(page_title="Прогноз временных рядов", layout="wide")
 st.title("📈 Прогнозирование временных рядов с Prophet")
+
+FORECAST_FILE = "forecast.csv"
 
 # --- Загрузка файла ---
 uploaded_file = st.file_uploader(
@@ -34,22 +38,21 @@ if uploaded_file:
         train = data_prophet.iloc[:split_point]
         test  = data_prophet.iloc[split_point:]
 
-        # --- Кэшированное обучение модели ---
-        @st.cache_resource
-        def train_prophet_model(train_data):
-            model = Prophet()
-            model.fit(train_data)
-            return model
+        MODEL_PARAMS_FILE = "prophet_params.pkl"
 
-        model = train_prophet_model(train)
-
-        # --- Прогноз ---
+        # --- Прогноз: загружаем готовый или обучаем ---
         weeks_ahead = st.number_input("Сколько недель прогнозировать вперед?", min_value=1, value=30)
         prediction_points = len(test) + weeks_ahead
-        future = model.make_future_dataframe(periods=prediction_points, freq='7D')
-        forecast = model.predict(future)
 
-    
+        if os.path.exists(FORECAST_FILE):
+            forecast = pd.read_csv(FORECAST_FILE, parse_dates=['ds'])
+        else:
+            model = Prophet()
+            model.fit(train)
+            future = model.make_future_dataframe(periods=prediction_points, freq='7D')
+            forecast = model.predict(future)
+            forecast.to_csv(FORECAST_FILE, index=False)
+
         # --- Метрики ---
         st.subheader("📊 Метрики")
         st.markdown("""
@@ -63,7 +66,6 @@ if uploaded_file:
         st.write(f"Train → MAE: {mean_absolute_error(train['y'], train_pred['yhat']):.2f}, R²: {r2_score(train['y'], train_pred['yhat']):.2f}")
         st.write(f"Test → MAE: {mean_absolute_error(test['y'], test_pred['yhat']):.2f}, R²: {r2_score(test['y'], test_pred['yhat']):.2f}")
 
-        st.markdown("")
         # --- Визуализация ---
         st.subheader("📈 Прогноз на всем ряде")
         st.markdown("""
@@ -81,7 +83,7 @@ if uploaded_file:
         ax.grid(True)
         st.pyplot(fig)
 
-        # --- Декомпозиция тренда и сезонности ---
+        # --- Декомпозиция ---
         st.subheader("⚙️ Декомпозиция тренда и сезонностей")
         st.markdown("""
         #### 1 график
@@ -91,5 +93,7 @@ if uploaded_file:
         Отражает регулярные повторяющиеся колебания — например, рост продаж перед праздниками или летом. \n
         Это закономерности, которые повторяются через фиксированный период (неделя, месяц, год).
         """)
+        model = Prophet()
+        model.fit(train)
         fig2 = model.plot_components(forecast)
         st.pyplot(fig2)
